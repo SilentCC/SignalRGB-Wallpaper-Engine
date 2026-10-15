@@ -3,6 +3,7 @@ Flickable {
     anchors.fill: parent
     contentHeight: mainLayout.height + 40
     clip: true
+    property string addDeviceError: ""
 
     ScrollBar.vertical: ScrollBar {
         id: scrollbar
@@ -87,7 +88,7 @@ Flickable {
 
             Rectangle {
                 width: parent.width
-                height: 160
+                height: 235
                 color: Qt.lighter(theme.background2, 1.1)
                 radius: 8
                 border.color: Qt.lighter(theme.background2, 1.3)
@@ -133,6 +134,39 @@ Flickable {
                         }
                     }
 
+                    Column {
+                        width: parent.width
+                        spacing: 4
+                        Text {
+                            text: "Target IPv4 Address (this PC or a LAN computer)"
+                            color: theme.secondarytextcolor
+                            font.pixelSize: 11
+                            font.family: "Poppins"
+                        }
+                        Rectangle {
+                            width: parent.width
+                            height: 36
+                            color: Qt.darker(theme.background2, 1.1)
+                            radius: 6
+                            border.color: ipInput.activeFocus ? "#009bde" : Qt.lighter(theme.background2, 1.3)
+                            border.width: 1
+
+                            TextField {
+                                id: ipInput
+                                anchors.fill: parent
+                                leftPadding: 10
+                                rightPadding: 10
+                                color: theme.primarytextcolor
+                                font.pixelSize: 12
+                                font.family: "Poppins"
+                                placeholderText: "192.168.1.20"
+                                text: "127.0.0.1"
+                                selectByMouse: true
+                                background: Item {}
+                            }
+                        }
+                    }
+
                     Row {
                         width: parent.width
                         spacing: 10
@@ -165,7 +199,7 @@ Flickable {
                                     color: theme.primarytextcolor
                                     font.pixelSize: 12
                                     font.family: "Poppins"
-                                    placeholderText: "8133-8136"
+                                    placeholderText: "8133"
                                     text: ""
                                     selectByMouse: true
                                     background: Item {}
@@ -202,20 +236,33 @@ Flickable {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        discovery.addManualDevice(
+                                        rootContainer.addDeviceError = discovery.addManualDevice(
                                             nameInput.text.trim() || "Wallpaper Device",
-                                            "127.0.0.1",
+                                            ipInput.text.trim(),
                                             portInput.text.trim() || "8133"
                                         );
+                                        if (rootContainer.addDeviceError)
+                                            return;
                                         nameInput.text = "";
                                         portInput.text = "8133";
                                     }
+
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+
+        Text {
+            width: Math.min(parent.width, 500)
+            visible: rootContainer.addDeviceError !== ""
+            text: rootContainer.addDeviceError
+            color: "#ff6b6b"
+            font.pixelSize: 12
+            font.family: "Poppins"
+            wrapMode: Text.WordWrap
         }
 
         // Device List Section

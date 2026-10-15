@@ -1,5 +1,5 @@
 export function Name() { return "Wallpaper Engine 2"; }
-export function Version() { return "2.0.0"; }
+export function Version() { return "2.1.0"; }
 export function Type() { return "network"; }
 export function Publisher() { return "I'm Not MentaL"; }
 export function Size() { return [32, 18]; }
@@ -51,6 +51,8 @@ export function ControllableParameters() {
 const MaxLedsInPacket = 480; //483;
 const ColorPacket = 0x00;
 const SettingPacket = 0x01;
+const SettingsRefreshIntervalMs = 5000;
+let nextSettingsSend = 0;
 
 //User settings
 const vMatrixSize = { "4:3 Landscape": 0, "4:3 Portrait": 1, "5:4 Landscape": 2, "5:4 Portrait": 3, "16:9 Landscape": 4, "16:9 Portrait": 5, "16:10 Landscape": 6, "16:10 Portrait": 7, "21:9 Landscape": 8, "21:9 Portrait": 9, "32:9 Landscape": 10, "32:9 Portrait": 11, "4:1 Landscape": 12, "4:1 Portrait": 13 };
@@ -184,9 +186,13 @@ export function Initialize() {
 	device.addFeature("udp");
 	device.setSize(vLedSizes[MatrixSize][MatrixTier]);
 	device.setFrameRateTarget(60);
+	nextSettingsSend = 0;
 }
 
 export function Render() {
+	if (Date.now() >= nextSettingsSend) {
+		updateSettings();
+	}
 	grabColors();
 }
 
@@ -208,6 +214,7 @@ function updateSettings() {
 
 	if (typeof controller !== 'undefined' && controller) {
 		udp.send(controller.ip, controller.port, packet);
+		nextSettingsSend = Date.now() + SettingsRefreshIntervalMs;
 	}
 }
 
@@ -313,24 +320,50 @@ export function DiscoveryService() {
 	};
 
 	this.addManualDevice = function(name, ip, port) {
-		if (!ip || !port) return;
-		const id = "Wallpaper_" + Date.now();
+		ip = typeof ip === "string" ? ip.trim() : "";
+		const portText = String(port).trim();
+		const octets = ip.split(".");
+		let error = "";
+		if (octets.length !== 4 || octets.some(function(octet) {
+			return !/^(0|[1-9]\d{0,2})$/.test(octet) || Number(octet) > 255;
+		}) || Number(octets[0]) === 0 || Number(octets[0]) >= 224 || ip === "255.255.255.255") {
+			error = "Enter a unicast IPv4 address, such as 192.168.1.20.";
+		} else if (!/^\d{1,5}$/.test(portText) || Number(portText) < 1 || Number(portText) > 65535) {
+			error = "Enter a UDP port from 1 to 65535.";
+		}
+		const devices = this.loadManualDevices() || [];
+		if (!error && devices.some(function(dev) {
+			return dev.ip === ip && Number(dev.port) === Number(portText);
+		})) {
+			error = "A wallpaper device with this IP and port already exists.";
+		}
+		if (error) {
+			service.log("Cannot add wallpaper device: " + error);
+			return error;
+		}
+		port = Number(portText);
+		const baseId = "Wallpaper_" + Date.now();
+		let id = baseId;
+		let suffix = 1;
+		while (devices.some(function(dev) { return dev.id === id; })) {
+			id = baseId + "_" + suffix++;
+		}
 		const newDevice = new WallpaperEngineController({
 			id: id,
-			port: parseInt(port),
+			port: port,
 			ip: ip,
 			name: name || "Wallpaper Device"
 		});
 		service.addController(newDevice);
 
-		const devices = this.loadManualDevices() || [];
 		devices.push({
 			id: id,
-			port: parseInt(port),
+			port: port,
 			ip: ip,
 			name: name || "Wallpaper Device"
 		});
 		this.saveManualDevices(devices);
+		return "";
 	};
 
 	this.removeManualDevice = function(id) {
