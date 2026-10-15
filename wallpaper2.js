@@ -1,5 +1,5 @@
 export function Name() { return "Wallpaper Engine 2"; }
-export function Version() { return "2.1.0"; }
+export function Version() { return "2.1.1"; }
 export function Type() { return "network"; }
 export function Publisher() { return "I'm Not MentaL"; }
 export function Size() { return [32, 18]; }
@@ -38,7 +38,7 @@ export function ControllableParameters() {
 		{ "property": "LedShape", "group": "lighting", "label": "LED Shape", description: "Choose your preferred LED shape.", "type": "combobox", "values": ["Rectangle", "Rounded Rectangle", "Sphere"], "default": "Rectangle" },
 		{ "property": "RoundedRectangleCornerRadius", "group": "lighting", description: "Specifies how round you want your LED's corner. (Only works when LED Shape is Rounded Rectangle)", "label": "Rounded Rectangle Corner Radius", "step": "1", "type": "number", "min": "0", "max": "20", "default": "2" },
 		{ "property": "LedPadding", "label": "LED Padding", "group": "lighting", description: "Specifies how much spacing between LEDs.", "step": "1", "type": "number", "min": "0", "max": "250", "default": "0" },
-		{ "property": "FPS", "label": "Target FPS", description: "Number of rendered frames per second.", "step": "1", "type": "number", "min": "1", "max": "240", "default": "60" },
+		{ "property": "FPS", "label": "Target FPS", description: "Receiver rendering FPS. The RGB stream follows lower values and is capped at 60 FPS.", "step": "1", "type": "number", "min": "1", "max": "240", "default": "60" },
 		{ "property": "ShowFps", "group": "settings", "label": "Show FPS", description: "Displays the current frames per second (FPS) of the wallpaper animation, useful for nerds.", "type": "boolean", "default": "false" },
 		{ "property": "BackgroundColor", "group": "settings", "label": "Background Color", description: "This color is applied to the background.", "min": "0", "max": "360", "type": "color", "default": "#000000" },
 		// { "property": "CpuUsagePauseValue", "label": "CPU Usage Pause Value", description: "Temporary Pause Wallpaper effects to reduce CPU usage for potato PC", "step": "1", "type": "number", "min": "50", "max": "100", "default": "60" },
@@ -158,6 +158,7 @@ export function onLedPaddingChanged() {
 }
 
 export function onFPSChanged() {
+	device.setFrameRateTarget(Math.min(FPS, 60));
 	updateSettings();
 }
 
@@ -185,7 +186,7 @@ export function Initialize() {
 	device.setName(controller.name);
 	device.addFeature("udp");
 	device.setSize(vLedSizes[MatrixSize][MatrixTier]);
-	device.setFrameRateTarget(60);
+	device.setFrameRateTarget(Math.min(FPS, 60));
 	nextSettingsSend = 0;
 }
 

@@ -59,6 +59,12 @@ The plugin sends settings before the first frame and every five seconds so a
 restarted receiver can recover its settings. UDP provides no connection
 acknowledgement; a configured device is not proof that B is receiving it.
 
+For a wireless LAN, higher Display Size tiers increase both packet count and
+receiver rendering cost. Start with Normal when diagnosing stutter and compare
+with a wired connection. Target FPS below 60 also lowers the RGB sending rate;
+values above 60 keep the existing 60 FPS sending cap while setting the receiver's
+rendering FPS. A high link speed does not eliminate latency spikes or UDP loss.
+
 - <a href="https://github.com/qiangqiang101/SignalRGB-Wallpaper-Engine/wiki/Wallpapers">Troubleshooting Wiki (GitHub)</a>
 - <a href="https://gitlab.com/nollie/SignalRGB-Wallpaper-Engine/-/wikis/Troubleshooting">Troubleshooting Wiki (GitLab)</a>
 - <a href="https://github.com/qiangqiang101/SignalRGB-Wallpaper-Engine/discussions/categories/tech-support">Ask the community</a>

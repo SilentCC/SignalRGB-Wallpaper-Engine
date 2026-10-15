@@ -54,6 +54,11 @@ A 电脑运行 SignalRGB 和本分支插件；B 电脑运行 Wallpaper Engine �
 插件在首帧前发送显示设置，并每五秒重发一次，使接收端重启后能恢复设置。
 UDP 没有连接确认，设备出现在列表中不代表 B 已收到数据。
 
+无线局域网中，Display Size 档位越高，发送的数据包数量和接收端绘制开销也越大。
+排查卡顿时建议先用 Normal 档位，并与有线连接作对比。Target FPS 低于 60 时，
+RGB 发送频率也会同步降低；高于 60 时，发送端仍保持原有的 60 FPS 上限，
+该设置值用于接收端的渲染帧率。无线连接速率高并不代表没有延迟波动或 UDP 丢包。
+
 - <a href="https://github.com/qiangqiang101/SignalRGB-Wallpaper-Engine/wiki/Wallpapers">故障排除 Wiki (GitHub)</a>
 - <a href="https://gitlab.com/nollie/SignalRGB-Wallpaper-Engine/-/wikis/Troubleshooting">故障排除 Wiki (GitLab)</a>
 - <a href="https://github.com/qiangqiang101/SignalRGB-Wallpaper-Engine/discussions/categories/tech-support">咨询社区</a>

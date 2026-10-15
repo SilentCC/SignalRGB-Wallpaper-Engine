@@ -12,11 +12,13 @@ function setup(saved) {
 	const packets = [];
 	const controllers = [];
 	const logs = [];
+	const frameRateTargets = [];
 	const context = vm.createContext({
 		Date: { now: () => now },
 		controller: { name: "Remote wallpaper", ip: "192.168.1.20", port: 8133 },
 		device: {
-			setName() {}, addFeature() {}, setSize() {}, setFrameRateTarget() {},
+			setName() {}, addFeature() {}, setSize() {},
+			setFrameRateTarget: (fps) => frameRateTargets.push(fps),
 			color: () => [10, 20, 30],
 		},
 		udp: { send: (ip, port, data) => packets.push({ ip, port, data: Array.from(data) }) },
@@ -37,7 +39,7 @@ function setup(saved) {
 			: parameter.type === "number" ? Number(parameter.default) : parameter.default;
 	}
 	return {
-		context, packets, controllers, logs,
+		context, packets, controllers, logs, frameRateTargets,
 		discovery: new context.DiscoveryService(),
 		stored: () => JSON.parse(stored),
 		advance: (milliseconds) => { now += milliseconds; },
@@ -125,4 +127,29 @@ test("sends settings before RGB, refreshes every five seconds and after initiali
 	context.Shutdown(false);
 	assert.ok(packets.every((packet) => packet.ip === "127.0.0.1" && packet.data[0] === 0));
 	assert.deepEqual(packets[0].data.slice(3, 6), [0, 155, 222]);
+});
+
+test("stream follows lower FPS settings without exceeding the existing 60 FPS cap", () => {
+	const { context, packets, frameRateTargets } = setup();
+	context.FPS = 45;
+	context.Initialize();
+	assert.deepEqual(frameRateTargets, [45]);
+	context.Render();
+	assert.equal(packets[0].data[9], 45);
+	packets.length = 0;
+	context.FPS = 30;
+	context.onFPSChanged();
+	assert.equal(frameRateTargets.at(-1), 30);
+	assert.equal(packets[0].data[9], 30);
+	packets.length = 0;
+	context.FPS = 120;
+	context.onFPSChanged();
+	assert.equal(frameRateTargets.at(-1), 60);
+	assert.equal(packets[0].data[9], 120);
+	context.FPS = 1;
+	context.Initialize();
+	assert.equal(frameRateTargets.at(-1), 1);
+	context.FPS = 60;
+	context.Initialize();
+	assert.equal(frameRateTargets.at(-1), 60);
 });
