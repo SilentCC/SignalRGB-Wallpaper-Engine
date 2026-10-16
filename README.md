@@ -100,6 +100,48 @@ Compare with a wired connection when isolating wireless stutter. Target FPS belo
 values above 60 keep the existing 60 FPS sending cap while setting the receiver's
 rendering FPS. A high link speed does not eliminate latency spikes or UDP loss.
 
+### Performance changes in 2.3.2
+
+Update **B's receiver** to obtain these optimizations. A's 2.3.0 and later senders
+remain compatible; A does not need reinstalling or restarting for this release.
+The 2.3.1 sharpness fix is included. X Large dimensions, every RGB sample, settings,
+the legacy UDP format and the existing sending FPS cap are unchanged.
+
+- Decode into a reusable spare color buffer outside the shared lock, then swap
+  buffers under a short lock. Rendering copies a coherent snapshot only when its
+  visual version changes; consumers never retain a buffer that the decoder recycles.
+- Compare complete RGB frames byte for byte. Identical content skips decoding,
+  publication and online invalidation, but still refreshes the valid-frame
+  heartbeat. Missing/invalid packets and settings alone do not refresh it.
+  Offline effects keep animating, and an identical returning frame restores the
+  online pixels even when its visual version has not changed.
+- Encode the complete BGRA image into reusable storage and use one native copy
+  for a packed framebuffer, instead of 72 / 168 row copies for the 128 x 72
+  landscape / 72 x 168 portrait X Large grids. Padded framebuffers retain a stride-aware path;
+  alpha, nearest-neighbor scaling and vector-shape fallback are preserved.
+- Reuse unchanged background brushes and blur effects during periodic settings
+  refresh instead of rebuilding them every five seconds.
+
+Sender sampling is intentionally unchanged: the maintained plugins' component
+channel `getColors("Inline")` API is not a verified equivalent of this device's
+existing 2D `device.color(x, y)` layout sampling. No guessed bulk API is used.
+Receiver-side duplicate suppression does **not** reduce UDP traffic or repair
+wireless packet loss. The legacy no-frame-ID limitation described below remains.
+The FPS overlay counts redraws, so a static image may show zero while valid RGB
+heartbeats continue arriving; the configured sending FPS has not been reduced.
+
+Run `.\tests\benchmark-receiver.ps1` for the CPU microbenchmark. It builds the
+actual **v2.3.1** source tag locally and compares frame processing/snapshots and
+packed bitmap encoding/upload with this version, using prebuilt datagrams,
+alternating variant order and the median of five 300-frame rounds. Both benchmark
+variants compile up front with tiered JIT disabled in the child process only,
+avoiding short-run tiering bias; the previous environment value is restored.
+This is a **steady-state, single-threaded CPU comparison**, not socket IO,
+GPU rendering, SignalRGB throughput, end-to-end latency or B's displayed FPS.
+No live A/B capture or sampling is performed.
+The baseline archive, build and `result.json` are retained under
+`artifacts\receiver-benchmark-2.3.2` for inspection.
+
 ### Sharpness fix in 2.3.1
 
 The actual wallpaper window now preserves nearest-neighbor bitmap scaling.

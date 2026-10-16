@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using Avalonia;
 using Avalonia.Media;
 
@@ -14,29 +15,43 @@ public class RGBClient
     private UdpClient? _udpClient;
     private int _listenPort = 8133; // Default port
     private volatile bool _isListening = false;
-    private DateTime _lastPacketTime = DateTime.Now;
+    private readonly TimeProvider _timeProvider;
+    private long _lastPacketTimeTicks;
+    private long _lastPacketTimestamp;
 
     public event EventHandler<RGBSettingsChangedEventArgs>? SettingsChanged;
     public event EventHandler<string>? ListenerFailed;
 
     public bool IsListening => _isListening;
-    public DateTime LastPacketTime => _lastPacketTime;
+    public DateTime LastPacketTime => new(Interlocked.Read(ref _lastPacketTimeTicks), DateTimeKind.Local);
+    public bool IsOffline => _timeProvider.GetElapsedTime(Interlocked.Read(ref _lastPacketTimestamp)) > TimeSpan.FromSeconds(2);
 
-    private readonly List<Color> _colors = new();
-    public List<Color> Colors => _colors;
+    private readonly object _colorLock = new();
+    private Color[] _colors = Array.Empty<Color>();
+    private Color[] _decodeColors = Array.Empty<Color>();
+    public List<Color> Colors
+    {
+        get
+        {
+            lock (_colorLock) return new List<Color>(_colors);
+        }
+    }
     private long _frameVersion;
     public long FrameVersion => System.Threading.Interlocked.Read(ref _frameVersion);
     public long DroppedFrames { get; private set; }
 
     public long CopyColorsTo(Color[] destination)
     {
-        lock (_colors)
+        int count;
+        long version;
+        lock (_colorLock)
         {
-            int count = Math.Min(_colors.Count, destination.Length);
-            _colors.CopyTo(0, destination, 0, count);
-            Array.Clear(destination, count, destination.Length - count);
-            return FrameVersion;
+            count = Math.Min(_colors.Length, destination.Length);
+            _colors.AsSpan(0, count).CopyTo(destination);
+            version = FrameVersion;
         }
+        Array.Clear(destination, count, destination.Length - count);
+        return version;
     }
 
     private MatrixSizeType _matrixSizeType;
@@ -217,8 +232,11 @@ public class RGBClient
     private string? _coverImage;
     public string? CoverImage => _coverImage;
 
-    public RGBClient(UserSave save, int port = 8133)
+    public RGBClient(UserSave save, int port = 8133, TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _lastPacketTimeTicks = _timeProvider.GetLocalNow().Ticks;
+        _lastPacketTimestamp = _timeProvider.GetTimestamp();
         _listenPort = port;
         _matrixSizeType = save.MatrixSizeType;
         _matrixSizeTier = save.MatrixSizeTier;
@@ -273,6 +291,7 @@ public class RGBClient
     }
 
     private byte[] _frameData = Array.Empty<byte>();
+    private byte[] _lastFrameData = Array.Empty<byte>();
     private byte[]? _lastSettings;
     private int _nextPacket;
     private IPAddress? _frameSender;
@@ -325,8 +344,9 @@ public class RGBClient
                     _nextPacket++;
                     if (_nextPacket == numPackets)
                     {
-                        ParseRGBCommands(_frameData);
-                        _lastPacketTime = DateTime.Now;
+                        PublishFrame();
+                        Interlocked.Exchange(ref _lastPacketTimeTicks, _timeProvider.GetLocalNow().Ticks);
+                        Interlocked.Exchange(ref _lastPacketTimestamp, _timeProvider.GetTimestamp());
                         _nextPacket = 0;
                         _frameSender = null;
                     }
@@ -381,30 +401,24 @@ public class RGBClient
         if (_nextPacket != 0) DropFrame("display settings changed during assembly");
     }
 
-    private void ParseRGBCommands(byte[] data)
+    private void PublishFrame()
     {
-        if (data.Length >= 3)
+        if (_frameData.AsSpan().SequenceEqual(_lastFrameData)) return;
+
+        int count = _frameData.Length / 3;
+        if (_decodeColors.Length != count) _decodeColors = new Color[count];
+        ReadOnlySpan<byte> data = _frameData;
+        Span<Color> colors = _decodeColors;
+        for (int source = 0, destination = 0; source < data.Length - 2; source += 3, destination++)
+            colors[destination] = Color.FromRgb(data[source], data[source + 1], data[source + 2]);
+
+        // The decoder owns the spare buffer; readers finish copying before it is recycled.
+        lock (_colorLock)
         {
-            try
-            {
-                lock (_colors)
-                {
-                    _colors.Clear();
-                    for (int i = 0; i < data.Length - 2; i += 3)
-                    {
-                        byte r = data[i];
-                        byte g = data[i + 1];
-                        byte b = data[i + 2];
-                        _colors.Add(Color.FromRgb(r, g, b));
-                    }
-                    System.Threading.Interlocked.Increment(ref _frameVersion);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Error parsing RGB packet: {ex.Message} {ex.StackTrace}");
-            }
+            (_colors, _decodeColors) = (_decodeColors, _colors);
+            Interlocked.Increment(ref _frameVersion);
         }
+        (_frameData, _lastFrameData) = (_lastFrameData, _frameData);
     }
 
     public void StopListening()

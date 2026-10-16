@@ -23,6 +23,7 @@ public partial class MainWindow : Window
 
     private string? _currentLoadedImage = null;
     private IImage? _cachedImage = null;
+    private string? _appliedBackgroundColor;
 #if WINDOWS
     private DispatcherTimer? _startupTimer = null;
     private int _startupTicksCount = 0;
@@ -284,11 +285,15 @@ public partial class MainWindow : Window
         Connect();
     }
 
-    private void UpdateVisuals()
+    internal void UpdateVisuals()
     {
         try
         {
-            Background = Utils.SetBrushColor(Utils.BackgroundColor);
+            if (_appliedBackgroundColor != Utils.BackgroundColor)
+            {
+                Background = Utils.SetBrushColor(Utils.BackgroundColor);
+                _appliedBackgroundColor = Utils.BackgroundColor;
+            }
             ledCanvas.SetBlurIntensity(Utils.BlurIntensity);
             DiffuserImage.Stretch = Utils.Stretch;
 

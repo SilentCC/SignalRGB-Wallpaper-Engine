@@ -192,6 +192,7 @@ public static class Utils
         }
         else
         {
+            if (control.Effect is BlurEffect blur && blur.Radius == intensity) return;
             control.Effect = new BlurEffect { Radius = intensity };
         }
     }

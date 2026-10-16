@@ -29,6 +29,7 @@ public class LedCanvas : Control
     public string CurrentFps => _currentFpsDisplay;
 
     private Color[] _stableColorSnapshot = Array.Empty<Color>();
+    private long _snapshotVersion = -1;
     private readonly Dictionary<Color, IBrush> _brushCache = new();
     private readonly Stopwatch _fpsWatch = new();
 
@@ -39,7 +40,7 @@ public class LedCanvas : Control
     private long _lastInvalidatedVersion = -1;
     private bool _wasOffline;
     private WriteableBitmap? _bitmap;
-    private byte[] _pixelRow = Array.Empty<byte>();
+    private byte[] _pixelBuffer = Array.Empty<byte>();
     private long _bitmapVersion = -1;
 
     public LedCanvas()
@@ -66,6 +67,7 @@ public class LedCanvas : Control
     public void RefreshSettings()
     {
         _lastInvalidatedVersion = -1;
+        _snapshotVersion = -1;
         _bitmapVersion = -1;
         RestartTimer();
         InvalidateVisual();
@@ -99,7 +101,12 @@ public class LedCanvas : Control
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
-        if (_client == null || !_client.IsListening) return;
+        RefreshFrame();
+    }
+
+    internal bool RefreshFrame()
+    {
+        if (_client == null || !_client.IsListening) return false;
 
         double currentTime = _fpsWatch.Elapsed.TotalMilliseconds;
         if (currentTime - _lastFpsUpdateTime >= 500)
@@ -111,12 +118,13 @@ public class LedCanvas : Control
             _lastFpsUpdateTime = currentTime;
         }
 
-        bool offline = (DateTime.Now - _client.LastPacketTime).TotalSeconds > 2;
+        bool offline = _client.IsOffline;
         long version = _client.FrameVersion;
-        if (!offline && !_wasOffline && version == _lastInvalidatedVersion) return;
+        if (!offline && !_wasOffline && version == _lastInvalidatedVersion) return false;
         _wasOffline = offline;
         _lastInvalidatedVersion = version;
         InvalidateVisual();
+        return true;
     }
 
     private IBrush GetBrush(Color color)
@@ -142,10 +150,12 @@ public class LedCanvas : Control
 
         _frameCount++;
         long version = _client.FrameVersion;
-        bool offline = (DateTime.Now - _client.LastPacketTime).TotalSeconds > 2;
+        bool offline = _client.IsOffline;
+        _wasOffline = offline;
 
         if (offline)
         {
+            _snapshotVersion = -1;
             // Offline/Shutdown effects
             int totalLeds = w * h;
             if (_stableColorSnapshot.Length != totalLeds)
@@ -202,8 +212,13 @@ public class LedCanvas : Control
             if (AudioEngine.IsActive) AudioEngine.Stop();
             int totalLeds = w * h;
             if (_stableColorSnapshot.Length != totalLeds)
+            {
                 _stableColorSnapshot = new Color[totalLeds];
-            version = _client.CopyColorsTo(_stableColorSnapshot);
+                _snapshotVersion = -1;
+            }
+            if (version != _snapshotVersion)
+                _snapshotVersion = _client.CopyColorsTo(_stableColorSnapshot);
+            version = _snapshotVersion;
         }
 
         if (_client.LEDShape == LEDShape.Rectangle && _client.LEDPadding == 0)
@@ -240,26 +255,30 @@ public class LedCanvas : Control
             _bitmap?.Dispose();
             _bitmap = new WriteableBitmap(new PixelSize(width, height), new Vector(96, 96),
                 PixelFormat.Bgra8888, AlphaFormat.Unpremul);
-            _pixelRow = new byte[width * 4];
+            _pixelBuffer = new byte[width * height * 4];
             _bitmapVersion = -1;
         }
         if (offline || version != _bitmapVersion)
         {
             using var framebuffer = _bitmap.Lock();
-            for (int y = 0; y < height; y++)
-            {
-                EncodeBgraRow(_stableColorSnapshot.AsSpan(y * width, width), _pixelRow);
-                Marshal.Copy(_pixelRow, 0, IntPtr.Add(framebuffer.Address, y * framebuffer.RowBytes), _pixelRow.Length);
-            }
-            _bitmapVersion = version;
+            EncodeBgraPixels(_stableColorSnapshot, _pixelBuffer);
+            CopyBgraPixels(_pixelBuffer, framebuffer.Address, framebuffer.RowBytes, width, height);
+            _bitmapVersion = offline ? -1 : version;
         }
         dc.DrawImage(_bitmap, new Rect(0, 0, width, height), new Rect(Bounds.Size));
     }
 
-    internal static void EncodeBgraRow(ReadOnlySpan<Color> colors, Span<byte> pixels)
+    internal static void EncodeBgraPixels(ReadOnlySpan<Color> colors, Span<byte> pixels)
     {
         if (pixels.Length != colors.Length * 4)
-            throw new ArgumentException("Pixel row length does not match the color count.");
+            throw new ArgumentException("Pixel buffer length does not match the color count.");
+        if (BitConverter.IsLittleEndian)
+        {
+            var values = MemoryMarshal.Cast<byte, uint>(pixels);
+            for (int i = 0; i < colors.Length; i++)
+                values[i] = colors[i].ToUInt32();
+            return;
+        }
         for (int i = 0; i < colors.Length; i++)
         {
             pixels[i * 4] = colors[i].B;
@@ -267,6 +286,26 @@ public class LedCanvas : Control
             pixels[i * 4 + 2] = colors[i].R;
             pixels[i * 4 + 3] = colors[i].A;
         }
+    }
+
+    internal static void CopyBgraPixels(byte[] pixels, IntPtr address, int rowBytes, int width, int height)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        int packedRowBytes = checked(width * 4);
+        ArgumentOutOfRangeException.ThrowIfLessThan(rowBytes, packedRowBytes);
+        if (pixels.Length != checked(packedRowBytes * height))
+            throw new ArgumentException("Pixel buffer length does not match the bitmap dimensions.", nameof(pixels));
+        if (address == IntPtr.Zero)
+            throw new ArgumentException("Bitmap address must not be null.", nameof(address));
+
+        if (rowBytes == packedRowBytes)
+        {
+            Marshal.Copy(pixels, 0, address, pixels.Length);
+            return;
+        }
+        for (int y = 0; y < height; y++)
+            Marshal.Copy(pixels, y * packedRowBytes, IntPtr.Add(address, checked(y * rowBytes)), packedRowBytes);
     }
 
     private void DrawLed(DrawingContext dc, int i, int j, Color color, double cellW, double cellH)
