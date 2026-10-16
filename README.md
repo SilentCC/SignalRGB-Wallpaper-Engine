@@ -100,6 +100,23 @@ Compare with a wired connection when isolating wireless stutter. Target FPS belo
 values above 60 keep the existing 60 FPS sending cap while setting the receiver's
 rendering FPS. A high link speed does not eliminate latency spikes or UDP loss.
 
+### Sharpness fix in 2.3.1
+
+The actual wallpaper window now preserves nearest-neighbor bitmap scaling.
+In 2.3.0 its XAML overrode the canvas default with a smoothing filter, softening
+LED boundaries even when Blur Intensity was zero. Rendering checks now load the
+real window XAML, not just an isolated canvas.
+
+Update **B's receiver** for this fix; A's 2.3.0 sender is compatible and does not
+need reinstalling. Grid size, layout, FPS, explicit blur settings and cover images
+are unchanged.
+
+X Large is a lighting grid, not a native-resolution desktop/video stream:
+16:9 landscape is **128 x 72** samples and 21:9 portrait is **72 x 168**.
+For example, a 1920 x 1080 screen displays each landscape sample as a 15 x 15
+pixel cell. Disabling blur and smoothing sharpens cell edges; it cannot recover
+text or fine details that were never sampled.
+
 ### Performance changes in 2.3.0
 
 - Sender constructs each legacy UDP packet directly, avoiding whole-frame

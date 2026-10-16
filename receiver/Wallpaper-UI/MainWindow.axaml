@@ -17,7 +17,7 @@
         <local:LedCanvas Name="ledCanvas"
                          HorizontalAlignment="Stretch"
                          VerticalAlignment="Stretch"
-                         RenderOptions.BitmapInterpolationMode="LowQuality">
+                         RenderOptions.BitmapInterpolationMode="None">
             <local:LedCanvas.Effect>
                 <BlurEffect Radius="20"/>
             </local:LedCanvas.Effect>

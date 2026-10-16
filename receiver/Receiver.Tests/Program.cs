@@ -165,7 +165,13 @@ try
     client.CopyColorsTo(colors);
     Check(colors[0] == Color.FromRgb(7, 8, 9), "Real UDP listener must preserve colors.");
 
-    var canvas = new LedCanvas { Client = client };
+    var window = new MainWindow();
+    var canvas = window.FindControl<LedCanvas>("ledCanvas") ??
+        throw new Exception("The actual wallpaper window is missing its LED canvas.");
+    Check(RenderOptions.GetBitmapInterpolationMode(canvas) == BitmapInterpolationMode.None,
+        "Window XAML must not override nearest-neighbor bitmap scaling with a smoothing filter.");
+    canvas.Client = client;
+    canvas.Effect = null;
     canvas.Measure(new Size(80, 20));
     canvas.Arrange(new Rect(0, 0, 80, 20));
     using var rendered = new RenderTargetBitmap(new PixelSize(80, 20), new Vector(96, 96));

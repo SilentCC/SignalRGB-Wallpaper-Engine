@@ -1,5 +1,5 @@
 export function Name() { return "Wallpaper Engine 2"; }
-export function Version() { return "2.3.0"; }
+export function Version() { return "2.3.1"; }
 export function Type() { return "network"; }
 export function Publisher() { return "I'm Not MentaL"; }
 export function Size() { return [32, 18]; }
