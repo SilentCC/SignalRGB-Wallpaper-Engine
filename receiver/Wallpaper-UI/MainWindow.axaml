@@ -1,0 +1,49 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="using:Wallpaper_UI"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Wallpaper_UI.MainWindow"
+        Title="RGB Wallpaper"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        WindowDecorations="None"
+        CanResize="False"
+        WindowState="Normal"
+        Foreground="White">
+
+    <Grid Name="Container">
+        <local:LedCanvas Name="ledCanvas"
+                         HorizontalAlignment="Stretch"
+                         VerticalAlignment="Stretch"
+                         RenderOptions.BitmapInterpolationMode="LowQuality">
+            <local:LedCanvas.Effect>
+                <BlurEffect Radius="20"/>
+            </local:LedCanvas.Effect>
+        </local:LedCanvas>
+
+        <Image Name="DiffuserImage"
+               HorizontalAlignment="Stretch"
+               VerticalAlignment="Stretch"
+               Stretch="Uniform" />
+
+        <TextBlock Name="txtConnectStatus"
+                   Margin="20,10,0,0"
+                   Foreground="White"
+                   FontSize="12"
+                   VerticalAlignment="Top"
+                   HorizontalAlignment="Left"
+                   TextWrapping="Wrap"/>
+
+        <TextBlock Name="txtFPS"
+                   Text="0"
+                   Foreground="Green"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Top"
+                   Margin="10"
+                   IsHitTestVisible="False"
+                   FontSize="20"
+                   FontFamily="Segoe UI" />
+    </Grid>
+</Window>

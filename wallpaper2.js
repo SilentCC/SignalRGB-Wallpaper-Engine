@@ -1,5 +1,5 @@
 export function Name() { return "Wallpaper Engine 2"; }
-export function Version() { return "2.1.1"; }
+export function Version() { return "2.3.0"; }
 export function Type() { return "network"; }
 export function Publisher() { return "I'm Not MentaL"; }
 export function Size() { return [32, 18]; }
@@ -73,7 +73,7 @@ const vLedPositions = {
 	"16:9 Landscape": { "Small": generateLedPositions(32, 18), "Normal": generateLedPositions(48, 27), "Large": generateLedPositions(64, 36), "X Large": generateLedPositions(128, 72) },
 	"16:9 Portrait": { "Small": generateLedPositions(18, 32), "Normal": generateLedPositions(27, 48), "Large": generateLedPositions(36, 64), "X Large": generateLedPositions(72, 128) },
 	"16:10 Landscape": { "Small": generateLedPositions(32, 20), "Normal": generateLedPositions(48, 30), "Large": generateLedPositions(64, 40), "X Large": generateLedPositions(128, 80) },
-	"16:10 Portrait": { "Small": generateLedPositions(29, 32), "Normal": generateLedPositions(30, 48), "Large": generateLedPositions(40, 64), "X Large": generateLedPositions(80, 128) },
+	"16:10 Portrait": { "Small": generateLedPositions(20, 32), "Normal": generateLedPositions(30, 48), "Large": generateLedPositions(40, 64), "X Large": generateLedPositions(80, 128) },
 	"21:9 Landscape": { "Small": generateLedPositions(42, 18), "Normal": generateLedPositions(63, 27), "Large": generateLedPositions(84, 36), "X Large": generateLedPositions(168, 72) },
 	"21:9 Portrait": { "Small": generateLedPositions(18, 42), "Normal": generateLedPositions(27, 63), "Large": generateLedPositions(36, 84), "X Large": generateLedPositions(72, 168) },
 	"32:9 Landscape": { "Small": generateLedPositions(64, 18), "Normal": generateLedPositions(96, 27), "Large": generateLedPositions(128, 36), "X Large": generateLedPositions(256, 72) },
@@ -220,33 +220,26 @@ function updateSettings() {
 }
 
 function grabColors(shutdown = false) {
-	const RGBData = [];
-	const LedCount = (vLedSizes[MatrixSize][MatrixTier][0] * vLedSizes[MatrixSize][MatrixTier][1]); //1296
-	const NumPackets = Math.ceil(LedCount / MaxLedsInPacket); //2
-
-	for (let iIdx = 0; iIdx < vLedPositions[MatrixSize][MatrixTier].length; iIdx++) {
-		const iPxX = vLedPositions[MatrixSize][MatrixTier][iIdx][0];
-		const iPxY = vLedPositions[MatrixSize][MatrixTier][iIdx][1];
-		let color;
-
-		if (shutdown) {
-			color = hexToRgb(shutdownColor);
-		} else if (LightingMode === "Forced") {
-			color = hexToRgb(forcedColor);
-		} else {
-			color = device.color(iPxX, iPxY);
-		}
-
-		const iLedIdx = (iIdx) * 3;
-		RGBData[iLedIdx] = color[0];
-		RGBData[iLedIdx + 1] = color[1];
-		RGBData[iLedIdx + 2] = color[2];
-	}
-
+	const positions = vLedPositions[MatrixSize][MatrixTier];
+	const LedCount = positions.length;
+	const NumPackets = Math.ceil(LedCount / MaxLedsInPacket);
+	const solidColor = shutdown ? hexToRgb(shutdownColor)
+		: LightingMode === "Forced" ? hexToRgb(forcedColor) : null;
 	for (let currPacket = 0; currPacket < NumPackets; currPacket++) {
 		const startIdx = currPacket * MaxLedsInPacket;
-		let packet = [ColorPacket, currPacket, NumPackets];
-		packet = packet.concat(RGBData.splice(0, MaxLedsInPacket * 3));
+		const endIdx = Math.min(startIdx + MaxLedsInPacket, LedCount);
+		const packet = new Array(3 + (endIdx - startIdx) * 3);
+		packet[0] = ColorPacket;
+		packet[1] = currPacket;
+		packet[2] = NumPackets;
+		let offset = 3;
+		for (let index = startIdx; index < endIdx; index++) {
+			const position = positions[index];
+			const color = solidColor || device.color(position[0], position[1]);
+			packet[offset++] = color[0];
+			packet[offset++] = color[1];
+			packet[offset++] = color[2];
+		}
 		udp.send(controller.ip, controller.port, packet);
 	}
 }

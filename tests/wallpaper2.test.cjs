@@ -153,3 +153,69 @@ test("stream follows lower FPS settings without exceeding the existing 60 FPS ca
 	context.Initialize();
 	assert.equal(frameRateTargets.at(-1), 60);
 });
+
+test("every grid keeps exact coordinates, RGB order, packet bounds and independent packet storage", () => {
+	const { context, packets } = setup();
+	for (const aspect of context.ControllableParameters().find((p) => p.property === "MatrixSize").values) {
+		for (const tier of ["Small", "Normal", "Large", "X Large"]) {
+			context.MatrixSize = aspect;
+			context.MatrixTier = tier;
+			const positions = context.LedPositions();
+			const size = vm.runInContext("vLedSizes[MatrixSize][MatrixTier]", context);
+			assert.equal(positions.length, size[0] * size[1], `${aspect} ${tier}`);
+			let sampled = 0;
+			context.device.color = (x, y) => {
+				assert.equal(x, sampled % size[0]);
+				assert.equal(y, Math.floor(sampled / size[0]));
+				sampled++;
+				return [x % 256, y % 256, sampled % 256];
+			};
+			packets.length = 0;
+			context.grabColors();
+			assert.equal(sampled, positions.length);
+			const count = Math.ceil(positions.length / 480);
+			assert.equal(packets.length, count);
+			const bytes = [];
+			for (let index = 0; index < count; index++) {
+				assert.deepEqual(packets[index].data.slice(0, 3), [0, index, count]);
+				assert.equal(packets[index].data.length, 3 + Math.min(480, positions.length - index * 480) * 3);
+				bytes.push(...packets[index].data.slice(3));
+			}
+			for (let index = 0; index < positions.length; index++) {
+				assert.deepEqual(bytes.slice(index * 3, index * 3 + 3),
+					[positions[index][0] % 256, positions[index][1] % 256, (index + 1) % 256]);
+			}
+		}
+	}
+});
+
+test("X Large forced and shutdown colors preserve all LEDs without reading the canvas", () => {
+	const { context, packets } = setup();
+	context.MatrixSize = "21:9 Portrait";
+	context.MatrixTier = "X Large";
+	context.LightingMode = "Forced";
+	context.forcedColor = "#123456";
+	context.device.color = () => { throw new Error("Solid colors must not sample the canvas"); };
+	context.grabColors();
+	assert.equal(packets.length, 26);
+	assert.deepEqual(packets.flatMap((p) => p.data.slice(3)),
+		Array.from({ length: 12096 }, () => [18, 52, 86]).flat());
+	packets.length = 0;
+	context.grabColors(true);
+	assert.deepEqual(packets.flatMap((p) => p.data.slice(3)),
+		Array.from({ length: 12096 }, () => [0, 155, 222]).flat());
+});
+
+test("packet buffers remain independent even if udp.send retains references", () => {
+	const { context } = setup();
+	context.MatrixTier = "X Large";
+	const retained = [];
+	context.udp.send = (_ip, _port, packet) => retained.push(packet);
+	context.grabColors();
+	const firstFrame = retained.map((packet) => Array.from(packet));
+	context.LightingMode = "Forced";
+	context.forcedColor = "#ffffff";
+	context.grabColors();
+	assert.equal(new Set(retained).size, retained.length);
+	assert.deepEqual(retained.slice(0, firstFrame.length).map((packet) => Array.from(packet)), firstFrame);
+});
